@@ -1597,7 +1597,7 @@ static int mpls_dev_notify(struct notifier_block *this, unsigned long event,
 		    dev->type == ARPHRD_TUNNEL6) {
 			mdev = mpls_add_dev(dev);
 			if (IS_ERR(mdev))
-				return notifier_from_errno(PTR_ERR(mdev));
+				return NOTIFY_DONE;
 		}
 		return NOTIFY_OK;
 	}
@@ -1641,7 +1641,7 @@ static int mpls_dev_notify(struct notifier_block *this, unsigned long event,
 			mpls_dev_sysctl_unregister(dev, mdev);
 			err = mpls_dev_sysctl_register(dev, mdev);
 			if (err)
-				return notifier_from_errno(err);
+				return NOTIFY_DONE;
 		}
 		break;
 	}
