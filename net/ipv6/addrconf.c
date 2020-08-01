@@ -3461,7 +3461,7 @@ static int addrconf_notify(struct notifier_block *this, unsigned long event,
 		if (!idev && dev->mtu >= IPV6_MIN_MTU) {
 			idev = ipv6_add_dev(dev);
 			if (IS_ERR(idev))
-				return notifier_from_errno(PTR_ERR(idev));
+				return NOTIFY_DONE;
 		}
 		break;
 
@@ -3608,11 +3608,11 @@ static int addrconf_notify(struct notifier_block *this, unsigned long event,
 			addrconf_sysctl_unregister(idev);
 			err = addrconf_sysctl_register(idev);
 			if (err)
-				return notifier_from_errno(err);
+				return NOTIFY_DONE;
 			err = snmp6_register_dev(idev);
 			if (err) {
 				addrconf_sysctl_unregister(idev);
-				return notifier_from_errno(err);
+				return NOTIFY_DONE;
 			}
 		}
 		break;
