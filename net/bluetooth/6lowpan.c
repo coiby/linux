@@ -651,6 +651,7 @@ static struct l2cap_chan *chan_create(void)
 
 	l2cap_chan_set_defaults(chan);
 
+	skb_queue_head_init(&chan->tx_q);
 	chan->chan_type = L2CAP_CHAN_CONN_ORIENTED;
 	chan->mode = L2CAP_MODE_LE_FLOWCTL;
 	chan->imtu = 1280;
