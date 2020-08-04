@@ -988,6 +988,7 @@ void __l2cap_chan_add(struct l2cap_conn *conn, struct l2cap_chan *chan);
 typedef void (*l2cap_chan_func_t)(struct l2cap_chan *chan, void *data);
 void l2cap_chan_list(struct l2cap_conn *conn, l2cap_chan_func_t func,
 		     void *data);
+void l2cap_conn_del(struct hci_conn *hcon, int err);
 void l2cap_chan_del(struct l2cap_chan *chan, int err);
 void l2cap_send_conn_req(struct l2cap_chan *chan);
 void l2cap_move_start(struct l2cap_chan *chan);

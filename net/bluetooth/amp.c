@@ -584,5 +584,5 @@ void amp_destroy_logical_link(struct hci_chan *hchan, u8 reason)
 {
 	BT_DBG("hchan %p", hchan);
 
-	hci_chan_del(hchan);
+	l2cap_conn_del(hchan->conn, bt_to_errno(reason));
 }

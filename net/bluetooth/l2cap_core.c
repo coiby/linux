@@ -1851,7 +1851,7 @@ static void l2cap_unregister_all_users(struct l2cap_conn *conn)
 	}
 }
 
-static void l2cap_conn_del(struct hci_conn *hcon, int err)
+void l2cap_conn_del(struct hci_conn *hcon, int err)
 {
 	struct l2cap_conn *conn = hcon->l2cap_data;
 	struct l2cap_chan *chan, *l;
