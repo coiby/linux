@@ -525,6 +525,7 @@ static const struct hid_device_id elan_devices[] = {
 	{ HID_USB_DEVICE(USB_VENDOR_ID_ELAN, USB_DEVICE_ID_HP_X2_10_COVER),
 	  .driver_data = ELAN_HAS_LED },
 	{ HID_I2C_DEVICE(USB_VENDOR_ID_ELAN, USB_DEVICE_ID_TOSHIBA_CLICK_L9W) },
+	{ HID_I2C_DEVICE(USB_VENDOR_ID_ELAN, 0x3140) },
 	{ }
 };
 MODULE_DEVICE_TABLE(hid, elan_devices);
