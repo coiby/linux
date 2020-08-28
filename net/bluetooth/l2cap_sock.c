@@ -1216,6 +1216,8 @@ static void l2cap_sock_kill(struct sock *sk)
 
 	l2cap_chan_put(l2cap_pi(sk)->chan);
 	sock_set_flag(sk, SOCK_DEAD);
+	if (kref_read(&l2cap_pi(sk)->chan->kref) > 1 && refcount_read(&sk->sk_refcnt) == 1)
+		refcount_set(&sk->sk_refcnt, 2);
 	sock_put(sk);
 }
 
