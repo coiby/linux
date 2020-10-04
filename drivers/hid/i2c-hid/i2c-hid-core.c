@@ -37,6 +37,8 @@
 #include <linux/hid.h>
 #include <linux/mutex.h>
 #include <linux/unaligned.h>
+#include <linux/kthread.h>
+#include <linux/gpio/driver.h>
 
 #include <drm/drm_panel.h>
 
@@ -70,6 +72,25 @@
 #define I2C_HID_PWR_ON		0x00
 #define I2C_HID_PWR_SLEEP	0x01
 
+/* polling mode */
+#define I2C_HID_POLLING_DISABLED 0
+#define I2C_HID_POLLING_GPIO_PIN 1
+#define I2C_HID_POLLING_INTERVAL_ACTIVE_US 4000
+#define I2C_HID_POLLING_INTERVAL_IDLE_MS 10
+
+static u8 polling_mode;
+module_param(polling_mode, byte, 0444);
+MODULE_PARM_DESC(polling_mode, "How to poll (default=0) - 0 disabled; 1 based on GPIO pin's status");
+
+static unsigned int polling_interval_active_us __read_mostly = I2C_HID_POLLING_INTERVAL_ACTIVE_US;
+module_param(polling_interval_active_us, uint, 0644);
+MODULE_PARM_DESC(polling_interval_active_us,
+		 "Poll every {polling_interval_active_us} us when the touchpad is active (default=" __stringify(I2C_HID_POLLING_INTERVAL_ACTIVE_US) " us)");
+
+static unsigned int polling_interval_idle_ms __read_mostly = I2C_HID_POLLING_INTERVAL_IDLE_MS;
+module_param(polling_interval_idle_ms, uint, 0644);
+MODULE_PARM_DESC(polling_interval_idle_ms,
+		 "Poll every {polling_interval_idle_ms} ms when the touchpad is idle (default=" __stringify(I2C_HID_POLLING_INTERVAL_IDLE_MS) "ms)");
 #define i2c_hid_dbg(ihid, ...) dev_dbg(&(ihid)->client->dev, __VA_ARGS__)
 
 struct i2c_hid_desc {
@@ -108,6 +129,11 @@ struct i2c_hid {
 	wait_queue_head_t	wait;		/* For waiting the interrupt */
 
 	struct mutex		cmd_lock;	/* protects cmdbuf and rawbuf */
+
+	struct task_struct *polling_thread;
+	unsigned long irq_trigger_type;
+	struct irq_data *irq_data;
+
 	struct mutex		reset_lock;
 
 	struct i2chid_ops	*ops;
@@ -822,7 +848,9 @@ static int i2c_hid_start(struct hid_device *hid)
 		i2c_hid_free_buffers(ihid);
 
 		ret = i2c_hid_alloc_buffers(ihid, bufsize);
-		enable_irq(client->irq);
+
+		if (polling_mode == I2C_HID_POLLING_DISABLED)
+			enable_irq(client->irq);
 
 		if (ret)
 			return ret;
@@ -862,6 +890,95 @@ static const struct hid_ll_driver i2c_hid_ll_driver = {
 	.output_report = i2c_hid_output_report,
 	.raw_request = i2c_hid_raw_request,
 };
+
+static int get_gpio_pin_state(struct irq_data *irq_data)
+{
+	struct gpio_chip *gc = irq_data_get_irq_chip_data(irq_data);
+	int value;
+
+	/*
+	 * This part of code is borrowed from gpiod_get_raw_value_commit in
+	 * drivers/gpio/gpiolib.c. Ideally, gpiod_get_value_cansleep can be re-used
+	 * instead but there is no API of converting (struct irq_desc *) to
+	 * (struct gpio_desc*).
+	 */
+	value = gc->get ? gc->get(gc, irq_data->hwirq) : -EIO;
+	value = value < 0 ? value : !!value;
+	return value;
+}
+
+static bool interrupt_line_active(struct i2c_hid *ihid)
+{
+	int status = get_gpio_pin_state(ihid->irq_data);
+	struct i2c_client *client = ihid->client;
+
+	if (status < 0) {
+		dev_dbg_ratelimited(&client->dev,
+				    "Failed to get GPIO Interrupt line status for %s",
+				    client->name);
+		return false;
+	}
+	/*
+	 * According to Windows Precsiontion Touchpad's specs
+	 * https://docs.microsoft.com/en-us/windows-hardware/design/component-guidelines/windows-precision-touchpad-device-bus-connectivity,
+	 * GPIO Interrupt Assertion Leve could be either ActiveLow or
+	 * ActiveHigh.
+	 */
+	if (ihid->irq_trigger_type & IRQF_TRIGGER_LOW)
+		return !status;
+
+	return status;
+}
+
+static int i2c_hid_polling_thread(void *i2c_hid)
+{
+	struct i2c_hid *ihid = i2c_hid;
+	unsigned int polling_interval_idle;
+
+	while (!kthread_should_stop()) {
+		while (interrupt_line_active(i2c_hid) &&
+		       !kthread_should_stop()) {
+			i2c_hid_get_input(ihid);
+			usleep_range(polling_interval_active_us,
+				     polling_interval_active_us + 100);
+		}
+		/*
+		 * re-calculate polling_interval_idle
+		 * so the module parameters polling_interval_idle_ms can be
+		 * changed dynamically through sysfs as polling_interval_active_us
+		 */
+		polling_interval_idle = polling_interval_idle_ms * 1000;
+		usleep_range(polling_interval_idle,
+			     polling_interval_idle + 1000);
+	}
+
+	return 0;
+}
+
+static int i2c_hid_init_polling(struct i2c_hid *ihid)
+{
+	struct i2c_client *client = ihid->client;
+
+	ihid->irq_trigger_type = irq_get_trigger_type(client->irq);
+	if (!ihid->irq_trigger_type) {
+		dev_dbg(&client->dev,
+			"Failed to get GPIO Interrupt Assertion Level, could not enable polling mode for %s",
+			 client->name);
+		return -EINVAL;
+	}
+
+	ihid->polling_thread = kthread_create(i2c_hid_polling_thread, ihid,
+					      "I2C HID polling thread");
+
+	if (IS_ERR(ihid->polling_thread)) {
+		dev_err(&client->dev, "Failed to create I2C HID polling thread");
+		return PTR_ERR(ihid->polling_thread);
+	}
+
+	ihid->irq_data = irq_get_irq_data(client->irq);
+	wake_up_process(ihid->polling_thread);
+	return 0;
+}
 
 static int i2c_hid_init_irq(struct i2c_client *client)
 {
@@ -975,7 +1092,8 @@ static int i2c_hid_core_suspend(struct i2c_hid *ihid, bool force_poweroff)
 	if (!(ihid->quirks & I2C_HID_QUIRK_NO_SLEEP_ON_SUSPEND))
 		i2c_hid_set_power(ihid, I2C_HID_PWR_SLEEP);
 
-	disable_irq(client->irq);
+	if (polling_mode == I2C_HID_POLLING_DISABLED)
+		disable_irq(client->irq);
 
 	if (force_poweroff || !device_may_wakeup(&client->dev))
 		i2c_hid_core_power_down(ihid);
@@ -992,7 +1110,8 @@ static int i2c_hid_core_resume(struct i2c_hid *ihid)
 	if (!device_may_wakeup(&client->dev))
 		i2c_hid_core_power_up(ihid);
 
-	enable_irq(client->irq);
+	if (polling_mode == I2C_HID_POLLING_DISABLED)
+		enable_irq(client->irq);
 
 	/* On Goodix 27c6:0d42 wait extra time before device wakeup.
 	 * It's not clear why but if we send wakeup too early, the device will
@@ -1201,6 +1320,15 @@ static int i2c_hid_core_register_panel_follower(struct i2c_hid *ihid)
 	return 0;
 }
 
+static void free_irq_or_stop_polling(struct i2c_client *client,
+				     struct i2c_hid *ihid)
+{
+	if (polling_mode != I2C_HID_POLLING_DISABLED)
+		kthread_stop(ihid->polling_thread);
+	else
+		free_irq(client->irq, ihid);
+}
+
 int i2c_hid_core_probe(struct i2c_client *client, struct i2chid_ops *ops,
 		       u16 hid_descriptor_address, u32 quirks)
 {
@@ -1272,7 +1400,10 @@ int i2c_hid_core_probe(struct i2c_client *client, struct i2chid_ops *ops,
 			goto err_power_down;
 	}
 
-	ret = i2c_hid_init_irq(client);
+	if (polling_mode != I2C_HID_POLLING_DISABLED)
+		ret = i2c_hid_init_polling(ihid);
+	else
+		ret = i2c_hid_init_irq(client);
 	if (ret < 0)
 		goto err_power_down;
 
@@ -1290,7 +1421,7 @@ int i2c_hid_core_probe(struct i2c_client *client, struct i2chid_ops *ops,
 	return 0;
 
 err_free_irq:
-	free_irq(client->irq, ihid);
+	free_irq_or_stop_polling(client, ihid);
 err_power_down:
 	if (!ihid->is_panel_follower)
 		i2c_hid_core_power_down(ihid);
@@ -1320,7 +1451,7 @@ void i2c_hid_core_remove(struct i2c_client *client)
 	hid = ihid->hid;
 	hid_destroy_device(hid);
 
-	free_irq(client->irq, ihid);
+	free_irq_or_stop_polling(client, ihid);
 
 	if (ihid->bufsize)
 		i2c_hid_free_buffers(ihid);
@@ -1332,7 +1463,7 @@ void i2c_hid_core_shutdown(struct i2c_client *client)
 	struct i2c_hid *ihid = i2c_get_clientdata(client);
 
 	i2c_hid_set_power(ihid, I2C_HID_PWR_SLEEP);
-	free_irq(client->irq, ihid);
+	free_irq_or_stop_polling(client, ihid);
 
 	i2c_hid_core_shutdown_tail(ihid);
 }
