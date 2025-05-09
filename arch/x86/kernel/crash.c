@@ -301,6 +301,7 @@ int crash_setup_memmap_entries(struct kimage *image, struct boot_params *params)
 	cmem = vzalloc(struct_size(cmem, ranges, 1));
 	if (!cmem)
 		return -ENOMEM;
+	cmem->max_nr_ranges = 1;
 
 	memset(&cmd, 0, sizeof(struct crash_memmap_data));
 	cmd.params = params;
