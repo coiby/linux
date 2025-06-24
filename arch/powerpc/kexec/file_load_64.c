@@ -32,6 +32,7 @@
 #include <asm/prom.h>
 #include <asm/plpks.h>
 #include <asm/cputhreads.h>
+#include <asm/set_memory.h>
 
 struct umem_info {
 	__be64 *buf;		/* data buffer for usable-memory property */
@@ -61,6 +62,34 @@ int arch_check_excluded_range(struct kimage *image, unsigned long start,
 			return 1;
 
 	return 0;
+}
+
+/* make the memory storing dm crypt keys in/accessible */
+static void kexec_mark_dm_crypt_keys(bool protect)
+{
+	unsigned long start_paddr, end_paddr;
+	unsigned int nr_pages;
+	int ret;
+
+	if (kexec_crash_image->dm_crypt_keys_addr) {
+		start_paddr = kexec_crash_image->dm_crypt_keys_addr;
+		end_paddr = start_paddr + kexec_crash_image->dm_crypt_keys_sz - 1;
+		nr_pages = (PAGE_ALIGN(end_paddr) - PAGE_ALIGN_DOWN(start_paddr)) / PAGE_SIZE;
+		if (protect)
+			ret = set_memory_np((unsigned long)phys_to_virt(start_paddr), nr_pages);
+		else
+			ret = set_memory_p((unsigned long)phys_to_virt(start_paddr), nr_pages);
+	}
+}
+
+void arch_kexec_protect_crashkres(void)
+{
+	kexec_mark_dm_crypt_keys(true);
+}
+
+void arch_kexec_unprotect_crashkres(void)
+{
+	kexec_mark_dm_crypt_keys(false);
 }
 
 #ifdef CONFIG_CRASH_DUMP
