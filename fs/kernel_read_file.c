@@ -107,7 +107,12 @@ ssize_t kernel_read_file(struct file *file, loff_t offset, void **buf,
 			goto out_free;
 		}
 
-		ret = security_kernel_post_read_file(file, *buf, i_size, id);
+		/*
+		 * security_kernel_post_read_file will be called later after
+		 * a read kernel module is truly decompressed
+		 */
+		if (id != READING_MODULE)
+			ret = security_kernel_post_read_file(file, *buf, i_size, id);
 	}
 
 out_free:
