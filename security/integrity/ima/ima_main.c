@@ -251,7 +251,7 @@ static int process_measurement(struct file *file, const struct cred *cred,
 	int xattr_len = 0;
 	bool violation_check;
 	enum hash_algo hash_algo;
-	enum ima_hooks func_ori;
+	enum ima_hooks func_ori = 0;
 	unsigned int allowed_algos = 0;
 
 	if (!ima_policy_flag || !S_ISREG(inode->i_mode))
@@ -865,6 +865,7 @@ static int ima_read_file(struct file *file, enum kernel_read_file_id read_id,
 const int read_idmap[READING_MAX_ID] = {
 	[READING_FIRMWARE] = FIRMWARE_CHECK,
 	[READING_MODULE] = MODULE_CHECK,
+	[READING_MODULE_COMPRESSED] = MODULE_COMPRESSED_CHECK,
 	[READING_KEXEC_IMAGE] = KEXEC_KERNEL_CHECK,
 	[READING_KEXEC_INITRAMFS] = KEXEC_INITRAMFS_CHECK,
 	[READING_POLICY] = POLICY_CHECK
