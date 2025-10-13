@@ -401,8 +401,13 @@ static int process_measurement(struct file *file, const struct cred *cred,
 	}
 
 	hash_algo = ima_get_hash_algo(xattr_value, xattr_len);
-
-	rc = ima_collect_measurement(iint, file, buf, size, hash_algo, modsig);
+	/*
+	 * Force ima_collect_measurement to re-read original module data by
+	 * passing null buffer in case buf is decompressed data.
+	 */
+	rc = ima_collect_measurement(iint, file,
+				     func == MODULE_CHECK ? NULL : buf,
+				     size, hash_algo, modsig);
 	if (rc != 0 && rc != -EBADF && rc != -EINVAL)
 		goto out_locked;
 
@@ -857,6 +862,7 @@ static int ima_read_file(struct file *file, enum kernel_read_file_id read_id,
 const int read_idmap[READING_MAX_ID] = {
 	[READING_FIRMWARE] = FIRMWARE_CHECK,
 	[READING_MODULE] = MODULE_CHECK,
+	[READING_MODULE_COMPRESSED] = MODULE_CHECK,
 	[READING_KEXEC_IMAGE] = KEXEC_KERNEL_CHECK,
 	[READING_KEXEC_INITRAMFS] = KEXEC_INITRAMFS_CHECK,
 	[READING_POLICY] = POLICY_CHECK
@@ -880,6 +886,10 @@ static int ima_post_read_file(struct file *file, char *buf, loff_t size,
 {
 	enum ima_hooks func;
 	struct lsm_prop prop;
+
+	/* kernel module will be addressed when read_id=READING_MODULE */
+	if (read_id == READING_MODULE_COMPRESSED)
+		return 0;
 
 	/* permit signed certs */
 	if (!file && read_id == READING_X509_CERTIFICATE)
