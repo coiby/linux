@@ -857,6 +857,7 @@ static int ima_read_file(struct file *file, enum kernel_read_file_id read_id,
 const int read_idmap[READING_MAX_ID] = {
 	[READING_FIRMWARE] = FIRMWARE_CHECK,
 	[READING_MODULE] = MODULE_CHECK,
+	[READING_MODULE_UNCOMPRESSED] = MODULE_CHECK,
 	[READING_KEXEC_IMAGE] = KEXEC_KERNEL_CHECK,
 	[READING_KEXEC_INITRAMFS] = KEXEC_INITRAMFS_CHECK,
 	[READING_POLICY] = POLICY_CHECK
@@ -880,6 +881,10 @@ static int ima_post_read_file(struct file *file, char *buf, loff_t size,
 {
 	enum ima_hooks func;
 	struct lsm_prop prop;
+
+	/* kernel module will be addressed when read_id=EADING_MODULE_UNCOMPRESSED */
+	if (read_id == READING_MODULE)
+		return 0;
 
 	/* permit signed certs */
 	if (!file && read_id == READING_X509_CERTIFICATE)
