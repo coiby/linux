@@ -132,7 +132,7 @@ struct ima_kexec_hdr {
 #define IMA_MEASURED		0x00000002
 #define IMA_APPRAISE		0x00000004
 #define IMA_APPRAISED		0x00000008
-/*#define IMA_COLLECT		0x00000010  do not use this flag */
+#define IMA_COLLECT		0x00000010
 #define IMA_COLLECTED		0x00000020
 #define IMA_AUDIT		0x00000040
 #define IMA_AUDITED		0x00000080
@@ -153,7 +153,7 @@ struct ima_kexec_hdr {
 #define IMA_NONACTION_RULE_FLAGS	(IMA_NONACTION_FLAGS & ~IMA_NEW_FILE)
 
 #define IMA_DO_MASK		(IMA_MEASURE | IMA_APPRAISE | IMA_AUDIT | \
-				 IMA_HASH | IMA_APPRAISE_SUBMASK)
+				 IMA_HASH | IMA_APPRAISE_SUBMASK | IMA_COLLECT)
 #define IMA_DONE_MASK		(IMA_MEASURED | IMA_APPRAISED | IMA_AUDITED | \
 				 IMA_HASHED | IMA_COLLECTED | \
 				 IMA_APPRAISED_SUBMASK)
@@ -319,6 +319,7 @@ static inline unsigned int ima_hash_key(u8 *digest)
 	hook(CREDS_CHECK, creds)			\
 	hook(POST_SETATTR, post_setattr)		\
 	hook(MODULE_CHECK, module)			\
+	hook(MODULE_COMPRESSED_CHECK, compressed-module)\
 	hook(FIRMWARE_CHECK, firmware)			\
 	hook(KEXEC_KERNEL_CHECK, kexec_kernel)		\
 	hook(KEXEC_INITRAMFS_CHECK, kexec_initramfs)	\
