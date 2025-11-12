@@ -251,11 +251,16 @@ static int process_measurement(struct file *file, const struct cred *cred,
 	int xattr_len = 0;
 	bool violation_check;
 	enum hash_algo hash_algo;
+	enum ima_hooks func_ori;
 	unsigned int allowed_algos = 0;
 
 	if (!ima_policy_flag || !S_ISREG(inode->i_mode))
 		return 0;
 
+	if (func == MODULE_COMPRESSED_CHECK) {
+		func_ori = MODULE_COMPRESSED_CHECK;
+		func = MODULE_CHECK;
+	}
 	/* Return an IMA_MEASURE, IMA_APPRAISE, IMA_AUDIT action
 	 * bitmask based on the appraise/audit/measurement policy.
 	 * Included is the appraise submask.
@@ -404,6 +409,9 @@ static int process_measurement(struct file *file, const struct cred *cred,
 
 	rc = ima_collect_measurement(iint, file, buf, size, hash_algo, modsig);
 	if (rc != 0 && rc != -EBADF && rc != -EINVAL)
+		goto out_locked;
+
+	if (func_ori == MODULE_COMPRESSED_CHECK)
 		goto out_locked;
 
 	if (!pathbuf)	/* ima_rdwr_violation possibly pre-fetched */

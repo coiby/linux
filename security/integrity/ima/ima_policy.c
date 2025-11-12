@@ -44,6 +44,7 @@
 #define DONT_MEASURE	0x0002
 #define APPRAISE	0x0004	/* same as IMA_APPRAISE */
 #define DONT_APPRAISE	0x0008
+#define COLLECT		0x0010
 #define AUDIT		0x0040
 #define HASH		0x0100
 #define DONT_HASH	0x0200
@@ -1062,6 +1063,7 @@ void ima_update_policy(void)
 
 /* Keep the enumeration in sync with the policy_tokens! */
 enum policy_opt {
+	Opt_collect,
 	Opt_measure, Opt_dont_measure,
 	Opt_appraise, Opt_dont_appraise,
 	Opt_audit, Opt_hash, Opt_dont_hash,
@@ -1081,6 +1083,7 @@ enum policy_opt {
 };
 
 static const match_table_t policy_tokens = {
+	{Opt_collect, "collect"},
 	{Opt_measure, "measure"},
 	{Opt_dont_measure, "dont_measure"},
 	{Opt_appraise, "appraise"},
@@ -1248,6 +1251,9 @@ static bool ima_validate_rule(struct ima_rule_entry *entry)
 		return false;
 
 	if (entry->action != MEASURE && entry->flags & IMA_PCR)
+		return false;
+
+	if (entry->action == COLLECT && entry->func != MODULE_CHECK)
 		return false;
 
 	if (entry->action != APPRAISE &&
@@ -1438,6 +1444,14 @@ static int ima_parse_rule(char *rule, struct ima_rule_entry *entry)
 			continue;
 		token = match_token(p, policy_tokens, args);
 		switch (token) {
+		case Opt_collect:
+			ima_log_string(ab, "action", "collect");
+
+			if (entry->action != UNKNOWN)
+				result = -EINVAL;
+
+			entry->action = COLLECT;
+			break;
 		case Opt_measure:
 			ima_log_string(ab, "action", "measure");
 
@@ -2087,6 +2101,8 @@ int ima_policy_show(struct seq_file *m, void *v)
 		}
 	}
 
+	if (entry->action & COLLECT)
+		seq_puts(m, pt(Opt_collect));
 	if (entry->action & MEASURE)
 		seq_puts(m, pt(Opt_measure));
 	if (entry->action & DONT_MEASURE)
