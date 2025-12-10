@@ -97,6 +97,13 @@ config INTEGRITY_CA_MACHINE_KEYRING_MAX
 	  will not be loaded. The remaining MOK keys are loaded into the
 	  .platform keyring.
 
+config INTEGRITY_SECURE_BOOT
+	def_bool y
+	depends on EFI || PPC_SECURE_BOOT || S390
+	help
+	  Provide secure boot related helper functions like querying the
+	  secure boot status.
+
 config LOAD_UEFI_KEYS
 	depends on INTEGRITY_PLATFORM_KEYRING
 	depends on EFI
