@@ -80,7 +80,8 @@ struct kimage_arch {
 };
 
 char *setup_kdump_cmdline(struct kimage *image, char *cmdline,
-			  unsigned long cmdline_len);
+			  unsigned long cmdline_len,
+			  char *name, unsigned long addr);
 int setup_purgatory(struct kimage *image, const void *slave_code,
 		    const void *fdt, unsigned long kernel_load_addr,
 		    unsigned long fdt_load_addr);
@@ -97,6 +98,12 @@ int arch_kimage_file_post_load_cleanup(struct kimage *image);
 int arch_check_excluded_range(struct kimage *image, unsigned long start,
 			      unsigned long end);
 #define arch_check_excluded_range  arch_check_excluded_range
+
+void arch_kexec_protect_crashkres(void);
+#define arch_kexec_protect_crashkres arch_kexec_protect_crashkres
+
+void arch_kexec_unprotect_crashkres(void);
+#define arch_kexec_unprotect_crashkres arch_kexec_unprotect_crashkres
 
 
 int load_crashdump_segments_ppc64(struct kimage *image,
