@@ -310,6 +310,15 @@ static ssize_t config_keys_reuse_show(struct config_item *item, char *page)
 	return sysfs_emit(page, "%d\n", is_dm_key_reused);
 }
 
+static bool crash_hotplug_support(struct kimage *image)
+{
+#ifdef CONFIG_CRASH_HOTPLUG
+	return kexec_crash_image->hotplug_support;
+#else
+	return false;
+#endif
+}
+
 static ssize_t config_keys_reuse_store(struct config_item *item,
 					   const char *page, size_t count)
 {
@@ -325,6 +334,11 @@ static ssize_t config_keys_reuse_store(struct config_item *item,
 		pr_debug("dm-crypt keys haven't be saved to crash-reserved memory\n");
 		r = -EINVAL;
 		goto unlock;
+	}
+
+	if (crash_hotplug_support(kexec_crash_image)) {
+		pr_debug("CONFIG_CRASH_HOTPLUG already enabled");
+		return -EINVAL;
 	}
 
 	if (kstrtobool(page, &val) || !val) {
@@ -516,14 +530,17 @@ out:
 void kexec_file_post_load_cleanup_dm_crypt(struct kimage *image)
 {
 	/*
-	 * For CPU/memory hot-plugging, the kdump image will be reloaded. Prevent
-	 * keys_header from being cleaned up during unloading when
-	 * is_dm_key_reused=true
+	 * For CPU/memory hot-plugging without CONFIG_CRASH_HOTPLUG, the whole kdump
+	 * image will be reloaded. Prevent keys_header from being cleaned up during
+	 * unloading when is_dm_key_reused=true
 	 */
 	if (!is_dm_key_reused) {
 		kfree_sensitive(keys_header);
 		keys_header = NULL;
 	}
+
+	if (crash_hotplug_support(image))
+		image->dm_crypt_keys_addr = 0;
 }
 
 static int __init configfs_dmcrypt_keys_init(void)
