@@ -8,6 +8,8 @@
 #include <linux/module.h>
 #include <linux/sysfs.h>
 
+#include "kexec_internal.h"
+
 #define KEY_NUM_MAX 128	/* maximum dm crypt keys */
 #define KEY_SIZE_MAX 256	/* maximum dm crypt key size */
 #define KEY_DESC_MAX_LEN 128	/* maximum dm crypt key description size */
@@ -225,7 +227,6 @@ static ssize_t config_key_description_store(struct config_item *item,
 	config_key->description = kmemdup_nul(page, len, GFP_KERNEL);
 	if (!config_key->description)
 		return ret;
-
 	return count;
 }
 
@@ -256,6 +257,12 @@ static struct config_item *config_keys_make_item(struct config_group *group,
 						 const char *name)
 {
 	struct config_key *config_key;
+	struct config_item *r;
+
+	if (!kexec_trylock()) {
+		r = ERR_PTR(EBUSY);
+		goto unlock;
+	}
 
 	if (key_count > KEY_NUM_MAX) {
 		pr_err("Only %u keys at maximum to be created\n", KEY_NUM_MAX);
@@ -263,14 +270,19 @@ static struct config_item *config_keys_make_item(struct config_group *group,
 	}
 
 	config_key = kzalloc_obj(struct config_key);
-	if (!config_key)
-		return ERR_PTR(-ENOMEM);
+	if (!config_key) {
+		r = ERR_PTR(-ENOMEM);
+		goto unlock;
+	}
 
 	config_item_init_type_name(&config_key->item, name, &config_key_type);
 
 	key_count++;
+	r = &config_key->item;
 
-	return &config_key->item;
+unlock:
+	kexec_unlock();
+	return r;
 }
 
 static ssize_t config_keys_count_show(struct config_item *item, char *page)
@@ -293,14 +305,22 @@ static ssize_t config_keys_reuse_store(struct config_item *item,
 	bool val;
 	int r;
 
+	if (!kexec_trylock()) {
+		r = -EBUSY;
+		goto unlock;
+	}
+
 	if (!kexec_crash_image || !kexec_crash_image->dm_crypt_keys_addr) {
 		kexec_dprintk(
 			"dm-crypt keys haven't be saved to crash-reserved memory\n");
-		return -EINVAL;
+		r = -EINVAL;
+		goto unlock;
 	}
 
-	if (kstrtobool(page, &val) || !val)
-		return -EINVAL;
+	if (kstrtobool(page, &val) || !val) {
+		r = -EINVAL;
+		goto unlock;
+	}
 
 	if (is_dm_key_reused) {
 		pr_info("Already got dm-crypt keys, please continue with kexec_file_load syscall\n");
@@ -308,12 +328,16 @@ static ssize_t config_keys_reuse_store(struct config_item *item,
 		r = get_keys_from_kdump_reserved_memory();
 		if (r) {
 			pr_warn("Failed to get dm-crypt keys from reserved memory\n");
-			return r;
+			goto unlock;
 		}
 		is_dm_key_reused = true;
 	}
 
-	return count;
+	r = count;
+
+unlock:
+	kexec_unlock();
+	return r;
 }
 
 CONFIGFS_ATTR(config_keys_, reuse);
