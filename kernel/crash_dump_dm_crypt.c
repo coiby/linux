@@ -435,6 +435,7 @@ int crash_load_dm_crypt_keys(struct kimage *image)
 	};
 	int r = 0;
 
+	mutex_lock(&config_keys_subsys.su_mutex);
 
 	if (key_count <= 0) {
 		kexec_dprintk("No dm-crypt keys\n");
@@ -483,6 +484,9 @@ void kexec_file_post_load_cleanup_dm_crypt(struct kimage *image)
 	 */
 	if (!is_dm_key_reused)
 		dm_crypt_keys_clean_up();
+
+	if (mutex_is_locked(&config_keys_subsys.su_mutex))
+		mutex_unlock(&config_keys_subsys.su_mutex);
 }
 
 static int __init configfs_dmcrypt_keys_init(void)
