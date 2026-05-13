@@ -1241,10 +1241,12 @@ static int _iwl_pci_resume(struct device *device, bool restore)
 		if (!(scratch & CSR_FUNC_SCRATCH_POWER_OFF_MASK) ||
 		    scratch == ~0U)
 			device_was_powered_off = true;
-	} else {
+	} else if (test_bit(STATUS_DEVICE_ENABLED, &trans->status)) {
 		/*
 		 * bh are re-enabled by iwl_trans_pcie_release_nic_access,
 		 * so re-enable them if _iwl_trans_pcie_grab_nic_access fails.
+		 *
+		 * Only do this check if the device stayed in D3 (fast suspend).
 		 */
 		local_bh_disable();
 		if (_iwl_trans_pcie_grab_nic_access(trans, true)) {
