@@ -1128,7 +1128,7 @@ static void iwl_mvm_cleanup_iterator(void *data, u8 *mac,
 	RCU_INIT_POINTER(mvmvif->deflink.probe_resp_data, NULL);
 }
 
-static void iwl_mvm_restart_cleanup(struct iwl_mvm *mvm)
+void iwl_mvm_restart_cleanup(struct iwl_mvm *mvm)
 {
 	iwl_mvm_stop_device(mvm);
 
@@ -1137,6 +1137,7 @@ static void iwl_mvm_restart_cleanup(struct iwl_mvm *mvm)
 	mvm->scan_status = 0;
 	mvm->ps_disabled = false;
 	mvm->rfkill_safe_init_done = false;
+	mvm->sf_state = SF_UNINIT;
 
 	/* just in case one was running */
 	iwl_mvm_cleanup_roc_te(mvm);

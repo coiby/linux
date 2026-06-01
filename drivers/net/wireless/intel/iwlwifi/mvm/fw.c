@@ -1692,10 +1692,6 @@ int iwl_mvm_up(struct iwl_mvm *mvm)
 	if (!fw_has_capa(&mvm->fw->ucode_capa, IWL_UCODE_TLV_CAPA_SET_LTR_GEN2))
 		WARN_ON(iwl_mvm_config_ltr(mvm));
 
-	ret = iwl_mvm_power_update_device(mvm);
-	if (ret)
-		goto error;
-
 	/*
 	 * RTNL is not taken during Ct-kill, but we don't need to scan/Tx
 	 * anyway, so don't init MCC.
@@ -1750,6 +1746,10 @@ int iwl_mvm_up(struct iwl_mvm *mvm)
 	}
 
 	iwl_mvm_mei_device_state(mvm, true);
+
+	ret = iwl_mvm_power_update_device(mvm);
+	if (ret)
+		goto error;
 
 	IWL_DEBUG_INFO(mvm, "RT uCode started.\n");
 	return 0;

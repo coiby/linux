@@ -2790,6 +2790,7 @@ int iwl_mvm_mac_testmode_cmd(struct ieee80211_hw *hw,
 			     void *data, int len);
 int iwl_mvm_mac_get_survey(struct ieee80211_hw *hw, int idx,
 			   struct survey_info *survey);
+void iwl_mvm_restart_cleanup(struct iwl_mvm *mvm);
 void iwl_mvm_mac_sta_statistics(struct ieee80211_hw *hw,
 				struct ieee80211_vif *vif,
 				struct ieee80211_sta *sta,
